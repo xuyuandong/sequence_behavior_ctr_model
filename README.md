@@ -52,7 +52,7 @@ The model below had been supported:
 - ARNN
 - RUM
 - DIEN
-- DIEN_with_neg
+- DIEN_with_aux
 
 ### MIMN
 You can train MIMN with different parameter setting:<br/>

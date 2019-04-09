@@ -34,7 +34,8 @@ def generator_queue(generator, max_q_size=20,
                         q.put(generator_output)
                     else:
                         time.sleep(wait_time)
-                except Exception:
+                except Exception, e:
+                    print e, "stop or gqt error"
                     _stop.set()
 
         for i in range(nb_worker):
@@ -42,7 +43,8 @@ def generator_queue(generator, max_q_size=20,
             generator_threads.append(thread)
             thread.daemon = True
             thread.start()
-    except Exception:
+    except Exception, e:
+        print e, "gq error"
         _stop.set()
         for p in generator_threads:
             if p.is_alive():
@@ -55,10 +57,25 @@ EMBEDDING_DIM = 16
 HIDDEN_SIZE = 16 * 2 
 best_auc = 0.0
 
-def prepare_data(src, target):
-    nick, side, item, vmid, cate, tags, segs = src
-    label, hist_item, hist_vmid, hist_cate, neg_item, neg_vmid, neg_cate, hist_mask = target
-    return nick, side, item, vmid, cate, tags, segs, label, hist_item, hist_vmid, hist_cate, neg_item, neg_vmid, neg_cate, hist_mask
+class Example(object):
+    def __init__(self, inps):
+        self.label = inps[0]
+        self.nick = inps[1]
+        self.item = inps[2]
+        self.vmid = inps[3]
+        self.cate = inps[4]
+        self.side = inps[5]
+        self.tags = inps[6]
+        self.side_mask = inps[7]
+        self.tags_mask = inps[8]
+        self.hist_item = inps[9]
+        self.hist_vmid = inps[10]
+        self.hist_cate = inps[11]
+        self.neg_item = inps[12]
+        self.neg_vmid = inps[13]
+        self.neg_cate = inps[14]
+        self.hist_mask = inps[15]
+        self.size = len(self.nick)
     
 def eval(sess, test_data, model, model_path, batch_size):
     loss_sum = 0.
@@ -70,13 +87,14 @@ def eval(sess, test_data, model, model_path, batch_size):
     while True:
         if  _stop.is_set() and test_data_pool.empty():
             break
-        src,tgt = test_data_pool.get()
-        nick, side, item, vmid, cate, tags, segs, label, hist_item, hist_vmid, hist_cate, neg_item, neg_vmid, neg_cate, hist_mask = prepare_data(src, tgt)
-        if len(nick) < batch_size:
+        src = test_data_pool.get()
+        ex = Example(src)
+
+        if ex.size < batch_size:
             continue
         nums += 1
-        target = label
-        prob, loss, acc, aux_loss = model.calculate(sess, [nick, side, item, vmid, cate, tags, segs, hist_item, hist_vmid, hist_cate, neg_item, neg_vmid, neg_cate, hist_mask, label])
+        target = ex.label
+        prob, loss, acc, aux_loss = model.calculate(sess, ex)
         loss_sum += loss
         aux_loss_sum = aux_loss
         accuracy_sum += acc
@@ -168,9 +186,11 @@ def train(
             while True:
                 if  _stop.is_set() and train_data_pool.empty():
                     break
-                src,tgt = train_data_pool.get()
-                nick, side, item, vmid, cate, tags, segs, label, hist_item, hist_vmid, hist_cate, neg_item, neg_vmid, neg_cate, hist_mask = prepare_data(src, tgt)
-                loss, acc, aux_loss = model.train(sess, [nick, side, item, vmid, cate, tags, segs, hist_item, hist_vmid, hist_cate, neg_item, neg_vmid, neg_cate, hist_mask, label, lr])
+                src = train_data_pool.get()
+                ex = Example(src)
+                if ex.size < BATCH_SIZE:
+                    continue
+                loss, acc, aux_loss = model.train(sess, ex, lr)
                 loss_sum += loss
                 accuracy_sum += acc
                 aux_loss_sum += aux_loss

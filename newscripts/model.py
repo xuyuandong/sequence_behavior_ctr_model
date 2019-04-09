@@ -6,6 +6,9 @@ import mimn as mimn
 import rum as rum
 from rnn import dynamic_rnn 
 # import mann_simple_cell as mann_cell
+
+SIDE_LEN = 30
+TAGS_LEN = 10
 class Model(object):
     def __init__(self, n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=False, Flag="DNN"):
         self.model_flag = Flag
@@ -15,30 +18,47 @@ class Model(object):
             self.item_his_batch_ph = tf.placeholder(tf.int32, [None, None], name='item_his_batch_ph')
             self.vmid_his_batch_ph = tf.placeholder(tf.int32, [None, None], name='vmid_his_batch_ph')
             self.cate_his_batch_ph = tf.placeholder(tf.int32, [None, None], name='cate_his_batch_ph')
+            self.mask = tf.placeholder(tf.float32, [None, None], name='mask_batch_ph')
+            
+            self.side_batch_ph = tf.placeholder(tf.int32, [None, None], name='side_batch_ph')
+            self.tags_batch_ph = tf.placeholder(tf.int32, [None, None], name='tags_batch_ph')
+            self.side_mask = tf.placeholder(tf.float32, [None, None], name='side_mask_ph')
+            self.tags_mask = tf.placeholder(tf.float32, [None, None], name='tags_mask_ph')
+            
             self.uid_batch_ph = tf.placeholder(tf.int32, [None, ], name='uid_batch_ph')
-            self.side_batch_ph = tf.placeholder(tf.int32, [None, ], name='side_batch_ph')
             self.item_batch_ph = tf.placeholder(tf.int32, [None, ], name='item_batch_ph')
             self.vmid_batch_ph = tf.placeholder(tf.int32, [None, ], name='vmid_batch_ph')
             self.cate_batch_ph = tf.placeholder(tf.int32, [None, ], name='cate_batch_ph')
-            self.tags_batch_ph = tf.placeholder(tf.int32, [None, ], name='tags_batch_ph')
-            self.segs_batch_ph = tf.placeholder(tf.int32, [None, ], name='segs_batch_ph')
-            self.mask = tf.placeholder(tf.float32, [None, None], name='mask_batch_ph')
+
             self.target_ph = tf.placeholder(tf.float32, [None, 2], name='target_ph')
             self.lr = tf.placeholder(tf.float64, [])
 
-        # Embedding layer
-        with tf.name_scope('Embedding_layer'):
-            #self.user_embeddings_var = tf.get_variable("user_embedding_var", [n_mid, EMBEDDING_DIM], trainable=True)
-            self.embeddings_var = tf.get_variable("embedding_var", [n_mid, EMBEDDING_DIM], trainable=True)
-            self.item_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.item_batch_ph)
-            self.item_his_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.item_his_batch_ph)
+        # User Embedding layer
+        with tf.name_scope('User_Embedding_layer'):
+            self.user_embeddings_var = tf.get_variable("user_embedding_var", [n_mid, EMBEDDING_DIM], trainable=True)
+            self.side_batch_embedded = tf.nn.embedding_lookup(self.user_embeddings_var, self.side_batch_ph) * tf.reshape(self.side_mask, (BATCH_SIZE, SIDE_LEN, 1))
+            self.side_eb_sum = tf.reduce_sum(self.side_batch_embedded, 1)
 
+
+        # Item Embedding layer
+        with tf.name_scope('Item_Embedding_layer'):
+            self.embeddings_var = tf.get_variable("embedding_var", [n_mid, EMBEDDING_DIM], trainable=True)
+            
+            self.item_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.item_batch_ph)
             self.vmid_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.vmid_batch_ph)
-            self.vmid_his_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.vmid_his_batch_ph)            
             self.cate_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.cate_batch_ph)
+            
+            self.item_his_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.item_his_batch_ph)
+            self.vmid_his_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.vmid_his_batch_ph)            
             self.cate_his_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.cate_his_batch_ph)            
 
+            self.tags_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.tags_batch_ph) * tf.reshape(self.tags_mask, (BATCH_SIZE, TAGS_LEN, 1))
+            self.tags_eb_sum = tf.reduce_sum(self.tags_batch_embedded, 1)
 
+        self.item_eb = tf.concat([self.item_batch_embedded, self.vmid_batch_embedded, self.cate_batch_embedded], axis=1)
+        self.item_his_eb = tf.concat([self.item_his_batch_embedded, self.vmid_his_batch_embedded, self.cate_his_batch_embedded], axis=2) * tf.reshape(self.mask,(BATCH_SIZE, SEQ_LEN, 1))
+        self.item_his_eb_sum = tf.reduce_sum(self.item_his_eb, 1)
+        
         with tf.name_scope('init_operation'):    
             self.embedding_placeholder = tf.placeholder(tf.float32,[n_mid, EMBEDDING_DIM], name="mid_emb_ph")
             self.embedding_init = self.embeddings_var.assign(self.embedding_placeholder)
@@ -47,14 +67,11 @@ class Model(object):
             self.item_neg_batch_ph = tf.placeholder(tf.int32, [None, None], name='neg_item_his_batch_ph')
             self.vmid_neg_batch_ph = tf.placeholder(tf.int32, [None, None], name='neg_vmid_his_batch_ph')
             self.cate_neg_batch_ph = tf.placeholder(tf.int32, [None, None], name='neg_cate_his_batch_ph')
+            
             self.neg_item_his_eb = tf.nn.embedding_lookup(self.embeddings_var, self.item_neg_batch_ph)
             self.neg_vmid_his_eb = tf.nn.embedding_lookup(self.embeddings_var, self.vmid_neg_batch_ph)
             self.neg_cate_his_eb = tf.nn.embedding_lookup(self.embeddings_var, self.cate_neg_batch_ph)
             self.neg_his_eb = tf.concat([self.neg_item_his_eb,self.neg_vmid_his_eb, self.neg_cate_his_eb], axis=2) * tf.reshape(self.mask,(BATCH_SIZE, SEQ_LEN, 1))   
-            
-        self.item_eb = tf.concat([self.item_batch_embedded, self.vmid_batch_embedded, self.cate_batch_embedded], axis=1)
-        self.item_his_eb = tf.concat([self.item_his_batch_embedded, self.vmid_his_batch_embedded, self.cate_his_batch_embedded], axis=2) * tf.reshape(self.mask,(BATCH_SIZE, SEQ_LEN, 1))
-        self.item_his_eb_sum = tf.reduce_sum(self.item_his_eb, 1)
 
     def build_fcn_net(self, inp, use_dice = False):
         bn1 = tf.layers.batch_normalization(inputs=inp, name='bn1')
@@ -127,78 +144,82 @@ class Model(object):
         embedding = sess.run(self.uid_bp_memory)
         return embedding                                 
     
-    def train(self, sess, inps):
+    def train(self, sess, ex, lr):
         if self.use_negsample:
             loss, aux_loss, accuracy, _ = sess.run([self.loss, self.aux_loss, self.accuracy, self.optimizer], feed_dict={
-                self.uid_batch_ph: inps[0],
-                self.side_batch_ph: inps[1],
-                self.item_batch_ph: inps[2],
-                self.mvid_batch_ph: inps[3],
-                self.cate_batch_ph: inps[4],
-                self.tags_batch_ph: inps[5],
-                self.segs_batch_ph: inps[6],
-                self.item_his_batch_ph: inps[7],
-                self.vmid_his_batch_ph: inps[8],
-                self.cate_his_batch_ph: inps[9],
-                self.item_neg_batch_ph: inps[10],
-                self.vmid_neg_batch_ph: inps[11],
-                self.cate_neg_batch_ph: inps[12],
-                self.mask: inps[13],
-                self.target_ph: inps[14],
-                self.lr: inps[15]
+                self.uid_batch_ph:  ex.nick,
+                self.item_batch_ph: ex.item,
+                self.vmid_batch_ph: ex.vmid,
+                self.cate_batch_ph: ex.cate,
+                self.side_batch_ph: ex.side,
+                self.tags_batch_ph: ex.tags,
+                self.side_mask:  ex.side_mask,
+                self.tags_mask:  ex.tags_mask,
+                self.item_his_batch_ph: ex.hist_item,
+                self.vmid_his_batch_ph: ex.hist_vmid,
+                self.cate_his_batch_ph: ex.hist_cate,
+                self.item_neg_batch_ph: ex.neg_item,
+                self.vmid_neg_batch_ph: ex.neg_vmid,
+                self.cate_neg_batch_ph: ex.neg_cate,
+                self.mask: ex.hist_mask,
+                self.target_ph: ex.label,
+                self.lr: lr
             })
         else:
             loss, accuracy, _ = sess.run([self.loss, self.accuracy, self.optimizer], feed_dict={
-                self.uid_batch_ph: inps[0],
-                self.side_batch_ph: inps[1],
-                self.item_batch_ph: inps[2],
-                self.vmid_batch_ph: inps[3],
-                self.cate_batch_ph: inps[4],
-                self.tags_batch_ph: inps[5],
-                self.segs_batch_ph: inps[6],
-                self.item_his_batch_ph: inps[7],
-                self.vmid_his_batch_ph: inps[8],
-                self.cate_his_batch_ph: inps[9],
-                self.mask: inps[13],
-                self.target_ph: inps[14],
-                self.lr: inps[15]
+                self.uid_batch_ph:  ex.nick,
+                self.item_batch_ph: ex.item,
+                self.vmid_batch_ph: ex.vmid,
+                self.cate_batch_ph: ex.cate,
+                self.side_batch_ph: ex.side,
+                self.tags_batch_ph: ex.tags,
+                self.side_mask:  ex.side_mask,
+                self.tags_mask:  ex.tags_mask,
+                self.item_his_batch_ph: ex.hist_item,
+                self.vmid_his_batch_ph: ex.hist_vmid,
+                self.cate_his_batch_ph: ex.hist_cate,
+                self.mask: ex.hist_mask,
+                self.target_ph: ex.label,
+                self.lr: lr
             })
             aux_loss = 0
         return loss, accuracy, aux_loss            
 
-    def calculate(self, sess, inps):
+    def calculate(self, sess, ex):
         if self.use_negsample:
             probs, loss, accuracy, aux_loss = sess.run([self.y_hat, self.loss, self.accuracy, self.aux_loss], feed_dict={
-                self.uid_batch_ph: inps[0],
-                self.side_batch_ph: inps[1],
-                self.item_batch_ph: inps[2],
-                self.mvid_batch_ph: inps[3],
-                self.cate_batch_ph: inps[4],
-                self.tags_batch_ph: inps[5],
-                self.segs_batch_ph: inps[6],
-                self.item_his_batch_ph: inps[7],
-                self.vmid_his_batch_ph: inps[8],
-                self.cate_his_batch_ph: inps[9],
-                self.item_neg_batch_ph: inps[10],
-                self.vmid_neg_batch_ph: inps[11],
-                self.cate_neg_batch_ph: inps[12],
-                self.mask: inps[13],
-                self.target_ph: inps[14],
+                self.uid_batch_ph:  ex.nick,
+                self.item_batch_ph: ex.item,
+                self.vmid_batch_ph: ex.vmid,
+                self.cate_batch_ph: ex.cate,
+                self.side_batch_ph: ex.side,
+                self.tags_batch_ph: ex.tags,
+                self.side_mask:  ex.side_mask,
+                self.tags_mask:  ex.tags_mask,
+                self.item_his_batch_ph: ex.hist_item,
+                self.vmid_his_batch_ph: ex.hist_vmid,
+                self.cate_his_batch_ph: ex.hist_cate,
+                self.item_neg_batch_ph: ex.neg_item,
+                self.vmid_neg_batch_ph: ex.neg_vmid,
+                self.cate_neg_batch_ph: ex.neg_cate,
+                self.mask: ex.hist_mask,
+                self.target_ph: ex.label
             })
         else:
             probs, loss, accuracy = sess.run([self.y_hat, self.loss, self.accuracy], feed_dict={
-                self.uid_batch_ph: inps[0],
-                self.side_batch_ph: inps[1],
-                self.item_batch_ph: inps[2],
-                self.vmid_batch_ph: inps[3],
-                self.cate_batch_ph: inps[4],
-                self.tags_batch_ph: inps[5],
-                self.segs_batch_ph: inps[6],
-                self.item_his_batch_ph: inps[7],
-                self.vmid_his_batch_ph: inps[8],
-                self.cate_his_batch_ph: inps[9],
-                self.mask: inps[13],
-                self.target_ph: inps[14],
+                self.uid_batch_ph:  ex.nick,
+                self.item_batch_ph: ex.item,
+                self.vmid_batch_ph: ex.vmid,
+                self.cate_batch_ph: ex.cate,
+                self.side_batch_ph: ex.side,
+                self.tags_batch_ph: ex.tags,
+                self.side_mask:  ex.side_mask,
+                self.tags_mask:  ex.tags_mask,
+                self.item_his_batch_ph: ex.hist_item,
+                self.vmid_his_batch_ph: ex.hist_vmid,
+                self.cate_his_batch_ph: ex.hist_cate,
+                self.mask: ex.hist_mask,
+                self.target_ph: ex.label
             })
             aux_loss = 0
         return probs, loss, accuracy, aux_loss
@@ -235,7 +256,6 @@ class Model_GRU4REC(Model):
         super(Model_GRU4REC, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
                                            BATCH_SIZE, SEQ_LEN, Flag="GRU4REC")
         with tf.name_scope('rnn_1'):
-            #TODO:?
             self.sequence_length = tf.Variable([SEQ_LEN] * BATCH_SIZE)
             rnn_outputs, final_state1 = dynamic_rnn(GRUCell(3*EMBEDDING_DIM), inputs=self.item_his_eb,
                                          sequence_length=self.sequence_length, dtype=tf.float32,
@@ -264,7 +284,7 @@ class Model_ARNN(Model):
                                            BATCH_SIZE, SEQ_LEN, Flag="ARNN")
         with tf.name_scope('rnn_1'):
             self.sequence_length = tf.Variable([SEQ_LEN] * BATCH_SIZE)
-            rnn_outputs, final_state1 = dynamic_rnn(GRUCell(2*EMBEDDING_DIM), inputs=self.item_his_eb,
+            rnn_outputs, final_state1 = dynamic_rnn(GRUCell(3*EMBEDDING_DIM), inputs=self.item_his_eb,
                                          sequence_length=self.sequence_length, dtype=tf.float32,
                                          scope="gru1")
             tf.summary.histogram('GRU_outputs', rnn_outputs)
@@ -311,7 +331,7 @@ class Model_DIEN(Model):
 
         with tf.name_scope('rnn_1'):
             self.sequence_length = tf.Variable([SEQ_LEN] * BATCH_SIZE)
-            rnn_outputs, _ = dynamic_rnn(GRUCell(2*EMBEDDING_DIM), inputs=self.item_his_eb,
+            rnn_outputs, _ = dynamic_rnn(GRUCell(3*EMBEDDING_DIM), inputs=self.item_his_eb,
                                          sequence_length=self.sequence_length, dtype=tf.float32,
                                          scope="gru1")
             tf.summary.histogram('GRU_outputs', rnn_outputs)        
