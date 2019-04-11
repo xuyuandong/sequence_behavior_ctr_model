@@ -5,6 +5,7 @@ from tensorflow.python.ops.rnn_cell import GRUCell
 import mimn as mimn
 import rum as rum
 from rnn import dynamic_rnn 
+from Dice import dice
 # import mann_simple_cell as mann_cell
 
 SIDE_LEN = 30
@@ -52,8 +53,12 @@ class Model(object):
             self.vmid_his_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.vmid_his_batch_ph)            
             self.cate_his_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.cate_his_batch_ph)            
 
-            self.tags_batch_embedded = tf.nn.embedding_lookup(self.embeddings_var, self.tags_batch_ph) * tf.reshape(self.tags_mask, (BATCH_SIZE, TAGS_LEN, 1))
+        # Tags Embedding layer
+        with tf.name_scope('Tags_Embedding_layer'):
+            self.tags_embeddings_var = tf.get_variable("tags_embedding_var", [n_mid, EMBEDDING_DIM], trainable=True)
+            self.tags_batch_embedded = tf.nn.embedding_lookup(self.tags_embeddings_var, self.tags_batch_ph) * tf.reshape(self.tags_mask, (BATCH_SIZE, TAGS_LEN, 1))
             self.tags_eb_sum = tf.reduce_sum(self.tags_batch_embedded, 1)
+
 
         self.item_eb = tf.concat([self.item_batch_embedded, self.vmid_batch_embedded, self.cate_batch_embedded], axis=1)
         self.item_his_eb = tf.concat([self.item_his_batch_embedded, self.vmid_his_batch_embedded, self.cate_his_batch_embedded], axis=2) * tf.reshape(self.mask,(BATCH_SIZE, SEQ_LEN, 1))
@@ -241,6 +246,15 @@ class Model_DNN(Model):
         inp = tf.concat([self.item_eb, self.item_his_eb_sum], 1)
         self.build_fcn_net(inp, use_dice=False)
         
+class Model_DNNEXT(Model):
+    def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256):
+        super(Model_DNNEXT, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
+                                           BATCH_SIZE, SEQ_LEN, Flag="DNNEXT")
+        
+        inp = tf.concat([self.item_eb, self.item_his_eb_sum, self.side_eb_sum, self.tags_eb_sum], 1)
+        self.build_fcn_net(inp, use_dice=False)
+
+
 
 class Model_PNN(Model):
     def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256):
@@ -252,9 +266,9 @@ class Model_PNN(Model):
 
 
 class Model_GRU4REC(Model):
-    def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256):
+    def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256, use_negsample=False):
         super(Model_GRU4REC, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
-                                           BATCH_SIZE, SEQ_LEN, Flag="GRU4REC")
+                                           BATCH_SIZE, SEQ_LEN, use_negsample, Flag="GRU4REC")
         with tf.name_scope('rnn_1'):
             self.sequence_length = tf.Variable([SEQ_LEN] * BATCH_SIZE)
             rnn_outputs, final_state1 = dynamic_rnn(GRUCell(3*EMBEDDING_DIM), inputs=self.item_his_eb,
@@ -262,9 +276,32 @@ class Model_GRU4REC(Model):
                                          scope="gru1")
             tf.summary.histogram('GRU_outputs', rnn_outputs)
                     
+        if use_negsample:
+            aux_loss_1 = self.auxiliary_loss(rnn_outputs[:, :-1, :], self.item_his_eb[:, 1:, :],
+                                             self.neg_his_eb[:, 1:, :], self.mask[:, 1:], stag = "bigru_0")
+            self.aux_loss = aux_loss_1
+
         inp = tf.concat([self.item_eb, self.item_his_eb_sum, final_state1], 1)
         self.build_fcn_net(inp, use_dice=False)
         
+class Model_GRU4RECEXT(Model):
+    def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256, use_negsample=False):
+        super(Model_GRU4RECEXT, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
+                                           BATCH_SIZE, SEQ_LEN, use_negsample, Flag="GRU4RECEXT")
+        with tf.name_scope('rnn_1'):
+            self.sequence_length = tf.Variable([SEQ_LEN] * BATCH_SIZE)
+            rnn_outputs, final_state1 = dynamic_rnn(GRUCell(3*EMBEDDING_DIM), inputs=self.item_his_eb,
+                                         sequence_length=self.sequence_length, dtype=tf.float32,
+                                         scope="gru1")
+            tf.summary.histogram('GRU_outputs', rnn_outputs)
+                    
+        if use_negsample:
+            aux_loss_1 = self.auxiliary_loss(rnn_outputs[:, :-1, :], self.item_his_eb[:, 1:, :],
+                                             self.neg_his_eb[:, 1:, :], self.mask[:, 1:], stag = "bigru_0")
+            self.aux_loss = aux_loss_1
+
+        inp = tf.concat([self.item_eb, self.item_his_eb_sum, final_state1, self.side_eb_sum, self.tags_eb_sum], 1)
+        self.build_fcn_net(inp, use_dice=False)
 
 class Model_DIN(Model):
     def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256):
@@ -277,17 +314,33 @@ class Model_DIN(Model):
         inp = tf.concat([self.item_eb, self.item_his_eb_sum, att_fea], -1)
         self.build_fcn_net(inp, use_dice=False)
 
+class Model_DINEXT(Model):
+    def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256):
+        super(Model_DINEXT, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
+                                           BATCH_SIZE, SEQ_LEN, Flag="DINEXT")
+        with tf.name_scope('Attention_layer'):
+            attention_output = din_attention(self.item_eb, self.item_his_eb, HIDDEN_SIZE, self.mask)
+            att_fea = tf.reduce_sum(attention_output, 1)
+            tf.summary.histogram('att_fea', att_fea)
+        inp = tf.concat([self.item_eb, self.item_his_eb_sum, att_fea, self.side_eb_sum, self.tags_eb_sum], -1)
+        self.build_fcn_net(inp, use_dice=False)
 
 class Model_ARNN(Model):
-    def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256):
+    def __init__(self,n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=256, use_negsample=False):
         super(Model_ARNN, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
-                                           BATCH_SIZE, SEQ_LEN, Flag="ARNN")
+                                           BATCH_SIZE, SEQ_LEN, use_negsample, Flag="ARNN")
         with tf.name_scope('rnn_1'):
             self.sequence_length = tf.Variable([SEQ_LEN] * BATCH_SIZE)
             rnn_outputs, final_state1 = dynamic_rnn(GRUCell(3*EMBEDDING_DIM), inputs=self.item_his_eb,
                                          sequence_length=self.sequence_length, dtype=tf.float32,
                                          scope="gru1")
             tf.summary.histogram('GRU_outputs', rnn_outputs)
+        
+        if use_negsample:
+            aux_loss_1 = self.auxiliary_loss(rnn_outputs[:, :-1, :], self.item_his_eb[:, 1:, :],
+                                             self.neg_his_eb[:, 1:, :], self.mask[:, 1:], stag = "bigru_0")
+            self.aux_loss = aux_loss_1
+
         # Attention layer
         with tf.name_scope('Attention_layer_1'):
             att_gru = din_attention(self.item_eb, rnn_outputs, HIDDEN_SIZE, self.mask)
@@ -296,33 +349,6 @@ class Model_ARNN(Model):
         inp = tf.concat([self.item_eb, self.item_his_eb_sum, final_state1, att_gru], -1)
         self.build_fcn_net(inp, use_dice=False)        
 
-class Model_RUM(Model):
-    def __init__(self, n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, MEMORY_SIZE, SEQ_LEN=400, mask_flag=True):
-        super(Model_RUM, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
-                                           BATCH_SIZE, SEQ_LEN, Flag="RUM")
-
-        def clear_mask_state(state, begin_state, mask, t):
-            state["controller_state"] = (1-tf.reshape(mask[:,t], (BATCH_SIZE, 1))) * begin_state["controller_state"] + tf.reshape(mask[:,t], (BATCH_SIZE, 1)) * state["controller_state"]
-            state["M"] = (1-tf.reshape(mask[:,t], (BATCH_SIZE, 1, 1))) * begin_state["M"] + tf.reshape(mask[:,t], (BATCH_SIZE, 1, 1)) * state["M"]
-            return state
-      
-        cell = rum.RUMCell(controller_units=HIDDEN_SIZE, memory_size=MEMORY_SIZE, memory_vector_dim=2*EMBEDDING_DIM,read_head_num=1, write_head_num=1,
-            reuse=False, output_dim=HIDDEN_SIZE, clip_value=20, batch_size=BATCH_SIZE)
-        
-        state = cell.zero_state(BATCH_SIZE, tf.float32)
-        begin_state = state
-        for t in range(SEQ_LEN):
-            output, state = cell(self.item_his_eb[:, t, :], state)
-            if mask_flag:
-                state = clear_mask_state(state, begin_state, self.mask, t)
-        
-        final_state = output
-        before_memory = state['M']
-        rum_att_hist = din_attention(self.item_eb, before_memory, HIDDEN_SIZE, None)
-
-        inp = tf.concat([self.item_eb, self.item_his_eb_sum, final_state, tf.squeeze(rum_att_hist)], 1)
-
-        self.build_fcn_net(inp, use_dice=False) 
 
 class Model_DIEN(Model):
     def __init__(self, n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN=400, use_negsample=False):
@@ -356,6 +382,33 @@ class Model_DIEN(Model):
         inp = tf.concat([self.item_eb, final_state2, self.item_his_eb_sum, self.item_eb*self.item_his_eb_sum], 1)
         self.build_fcn_net(inp, use_dice=False)
 
+class Model_RUM(Model):
+    def __init__(self, n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, MEMORY_SIZE, SEQ_LEN=400, mask_flag=True):
+        super(Model_RUM, self).__init__(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, 
+                                           BATCH_SIZE, SEQ_LEN, Flag="RUM")
+
+        def clear_mask_state(state, begin_state, mask, t):
+            state["controller_state"] = (1-tf.reshape(mask[:,t], (BATCH_SIZE, 1))) * begin_state["controller_state"] + tf.reshape(mask[:,t], (BATCH_SIZE, 1)) * state["controller_state"]
+            state["M"] = (1-tf.reshape(mask[:,t], (BATCH_SIZE, 1, 1))) * begin_state["M"] + tf.reshape(mask[:,t], (BATCH_SIZE, 1, 1)) * state["M"]
+            return state
+      
+        cell = rum.RUMCell(controller_units=HIDDEN_SIZE, memory_size=MEMORY_SIZE, memory_vector_dim=2*EMBEDDING_DIM,read_head_num=1, write_head_num=1,
+            reuse=False, output_dim=HIDDEN_SIZE, clip_value=20, batch_size=BATCH_SIZE)
+        
+        state = cell.zero_state(BATCH_SIZE, tf.float32)
+        begin_state = state
+        for t in range(SEQ_LEN):
+            output, state = cell(self.item_his_eb[:, t, :], state)
+            if mask_flag:
+                state = clear_mask_state(state, begin_state, self.mask, t)
+        
+        final_state = output
+        before_memory = state['M']
+        rum_att_hist = din_attention(self.item_eb, before_memory, HIDDEN_SIZE, None)
+
+        inp = tf.concat([self.item_eb, self.item_his_eb_sum, final_state, tf.squeeze(rum_att_hist)], 1)
+
+        self.build_fcn_net(inp, use_dice=False) 
        
         
 class Model_MIMN(Model):

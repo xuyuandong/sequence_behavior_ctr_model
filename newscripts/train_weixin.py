@@ -145,20 +145,32 @@ def train(
 
         if model_type == 'DNN': 
             model = Model_DNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'DNNEXT': 
+            model = Model_DNNEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'PNN': 
             model = Model_PNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'GRU4REC': 
             model = Model_GRU4REC(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'GRU4REC_with_aux': 
+            model = Model_GRU4REC(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
+        elif model_type == 'GRU4RECEXT': 
+            model = Model_GRU4RECEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'GRU4RECEXT_with_aux': 
+            model = Model_GRU4RECEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
         elif model_type == 'DIN': 
             model = Model_DIN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'DINEXT': 
+            model = Model_DINEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'ARNN': 
             model = Model_ARNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
-        elif model_type == 'RUM' :
-            model = Model_RUM(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, Memory_Size, SEQ_LEN)
+        elif model_type == 'ARNN_with_aux': 
+            model = Model_ARNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
         elif model_type == 'DIEN': 
             model = Model_DIEN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'DIEN_with_aux': 
             model = Model_DIEN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
+        elif model_type == 'RUM' :
+            model = Model_RUM(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, Memory_Size, SEQ_LEN)
         elif model_type == 'MIMN':
             model = Model_MIMN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, Memory_Size, SEQ_LEN, Mem_Induction, Util_Reg) 
         elif model_type == 'MIMN_with_aux':
@@ -242,20 +254,32 @@ def test(
 
         if model_type == 'DNN': 
             model = Model_DNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'DNNEXT': 
+            model = Model_DNNEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'PNN': 
             model = Model_PNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'GRU4REC': 
             model = Model_GRU4REC(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'GRU4REC_with_aux': 
+            model = Model_GRU4REC(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
+        elif model_type == 'GRU4RECEXT': 
+            model = Model_GRU4RECEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'GRU4RECEXT_with_aux': 
+            model = Model_GRU4RECEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
         elif model_type == 'DIN': 
             model = Model_DIN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
+        elif model_type == 'DINEXT': 
+            model = Model_DINEXT(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'ARNN': 
             model = Model_ARNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
-        elif model_type == 'RUM' :
-            model = Model_RUM(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, Memory_Size, SEQ_LEN)
+        elif model_type == 'ARNN_with_aux': 
+            model = Model_ARNN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
         elif model_type == 'DIEN': 
             model = Model_DIEN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN)
         elif model_type == 'DIEN_with_aux': 
             model = Model_DIEN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, SEQ_LEN, use_negsample=True)
+        elif model_type == 'RUM' :
+            model = Model_RUM(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, Memory_Size, SEQ_LEN)
         elif model_type == 'MIMN':
             model = Model_MIMN(n_uid, n_mid, EMBEDDING_DIM, HIDDEN_SIZE, BATCH_SIZE, Memory_Size, SEQ_LEN, Mem_Induction, Util_Reg) 
         elif model_type == 'MIMN_with_aux':
